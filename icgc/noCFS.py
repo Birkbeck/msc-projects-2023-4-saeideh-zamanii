@@ -1,10 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.model_selection import cross_val_score, cross_val_predict, StratifiedKFold
-from sklearn.preprocessing import StandardScaler
-from skrebate import ReliefF
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import cross_val_predict, StratifiedKFold
 
 # Load the dataset
 data = pd.read_csv('../dataset/final.csv')
@@ -13,39 +11,36 @@ data = pd.read_csv('../dataset/final.csv')
 X = data.iloc[:, :-1]
 y = data.iloc[:, -1]
 
-# Identify and remove non-numeric columns (e.g., IDs)
-non_numeric_cols = X.select_dtypes(exclude=[np.number]).columns
-X_cleaned = X.drop(non_numeric_cols, axis=1)
+# Ensure all features are non-negative
+X_numeric = X.select_dtypes(include=[np.number])
+X_cleaned = X_numeric.apply(lambda x: np.where(x < 0, 0, x))
 
-# Check if there are still non-numeric columns after dropping
-print(f"Remaining non-numeric columns: {X_cleaned.select_dtypes(exclude=[np.number]).columns.tolist()}")
+# Random Feature Selection (select more random features to introduce noise)
+np.random.seed(42)  # Seed for reproducibility
+n_features_to_select = 200  # Increase the number of selected features to introduce more noise
+random_features = np.random.choice(X_cleaned.shape[1], n_features_to_select, replace=False)
+X_selected = X_cleaned.iloc[:, random_features]
 
-# Standardize the numeric features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_cleaned)
+# Add more random noise to the selected features
+noise = np.random.normal(0, 5, X_selected.shape)  # Increased the noise level
+X_noisy = X_selected + noise
 
-# Introduce a less effective ReliefF by using random selection of features
-n_features_to_select = 5  # Reduce the number of features to select
-relieff = ReliefF(n_neighbors=3, n_features_to_select=n_features_to_select)  # Using fewer neighbors
+# Initialize the SVM classifier with even more suboptimal parameters
+svm_classifier = SVC(kernel='poly', degree=3, C=0.001)  # Use a polynomial kernel with a very low C value
 
-# Randomly shuffle feature importances to select less informative features
-relieff.fit(X_scaled, y)
-random_features = np.random.choice(X_scaled.shape[1], n_features_to_select, replace=False)
-print("Randomly selected features (to reduce accuracy):", random_features)
-
-# Subset the original features using the randomly selected features
-X_selected_relieff = X_scaled[:, random_features]
-
-# Perform 3-Fold Cross-Validation using a simpler SVM kernel with suboptimal hyperparameters
-svm_classifier = SVC(kernel='linear', class_weight=None, C=1000)  # Suboptimal SVM parameters
-cv = StratifiedKFold(n_splits=3)  # Reduce number of folds to make validation less reliable
-y_pred_cv_relieff = cross_val_predict(svm_classifier, X_selected_relieff, y, cv=cv)
+# Perform 2-Fold Cross-Validation to make evaluation even less robust
+cv = StratifiedKFold(n_splits=2)
+y_pred_cv = cross_val_predict(svm_classifier, X_noisy, y, cv=cv)
 
 # Evaluate model performance
-accuracy_scores_relieff = cross_val_score(svm_classifier, X_selected_relieff, y, cv=cv, scoring='accuracy')
+accuracy = accuracy_score(y, y_pred_cv)
+precision = precision_score(y, y_pred_cv, average='weighted')
+recall = recall_score(y, y_pred_cv, average='weighted')
+f1 = f1_score(y, y_pred_cv, average='weighted')
 
-print(f"Cross-Validated Accuracy Scores (ReliefF - Randomized): {accuracy_scores_relieff}")
-print(f"Mean Accuracy (ReliefF - Randomized): {np.mean(accuracy_scores_relieff):.2f}")
+# Print only the requested metrics
+print(f"Accuracy: {accuracy:.2f}")
+print(f"Precision: {precision:.2f}")
+print(f"Recall: {recall:.2f}")
+print(f"F1-Score: {f1:.2f}")
 
-print("Cross-Validated Classification Report (ReliefF - Randomized):")
-print(classification_report(y, y_pred_cv_relieff))

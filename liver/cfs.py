@@ -4,7 +4,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import cross_val_score, cross_val_predict, StratifiedKFold
-from ..module.mutual_information import su_calculation  # Ensure this is implemented correctly
+from mutual_information import su_calculation  
 
 # Load the cleaned dataset
 data = pd.read_csv('../dataset/cleaned_liver_cancer_data.csv')
